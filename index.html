@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeleMed Nabha - Basic Video Call</title>
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0; }
+        .header h1 { color: #2c3e50; margin-bottom: 10px; }
+        .setup-alert { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+        .controls { display: flex; gap: 15px; margin-bottom: 30px; align-items: center; flex-wrap: wrap; }
+        .controls input { flex: 2; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
+        .controls button { flex: 1; padding: 12px 20px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; transition: all 0.3s ease; }
+        .join-btn { background: #27ae60; }
+        .join-btn:hover { background: #2ecc71; }
+        .leave-btn { background: #e74c3c; }
+        .leave-btn:hover { background: #c0392b; }
+        .video-area { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
+        .video-container { background: #34495e; border-radius: 12px; overflow: hidden; position: relative; aspect-ratio: 16/9; border: 3px solid #bdc3c7; }
+        .video-container video { width: 100%; height: 100%; object-fit: cover; }
+        .video-label { position: absolute; bottom: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 12px; border-radius: 15px; font-size: 14px; font-weight: bold; }
+        .status { text-align: center; padding: 15px; margin: 20px 0; border-radius: 8px; font-weight: bold; font-size: 16px; }
+        .status.disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status.connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 TeleMed Nabha - Video Consultation</h1>
+            <p>Rural Healthcare Video Calling System</p>
+        </div>
+        
+        <div class="setup-alert" id="setupAlert">
+            ⚠️ Setup Required: Replace YOUR_APP_ID with your actual Agora App ID!
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="channelInput" placeholder="Enter room name (e.g., sih-demo-test)" value="sih-demo-test">
+            <button class="join-btn" onclick="joinCall()">📹 Join Call</button>
+            <button class="leave-btn" onclick="leaveCall()">📞 Leave Call</button>
+        </div>
+        
+        <div class="status disconnected" id="statusDisplay">
+            Status: Ready to connect - Enter room name and click Join Call
+        </div>
+        
+        <div class="video-area" id="videoArea">
+            <div class="video-container" id="localVideoContainer">
+                <div class="video-label">Your Video (Not connected)</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ✅ Your App ID
+        const APP_ID = "ea67834385f74747bf384d9cc2443aac";  
+
+        // ✅ Temporary Token (must be one line only!)
+        const TOKEN = "007eJxTYKhUidTTFG/+v+GL5jeVwJgdu2qP7ktd5j73T0D654uStvIKDKmJZuYWxibGFqZp5iZAmJRmbGGSYpmcbGRiYpyYmDwh7ERGQyAjg4OxIgMjFIL4vAzFmRm6Kam5+bolqcUlDAwAXuAiCw==";
+
+        let rtc = { client: null, localAudioTrack: null, localVideoTrack: null };
+        let isJoined = false;
+        
+        async function joinCall() {
+            if (APP_ID === "YOUR_APP_ID") {
+                alert("Please replace YOUR_APP_ID with your actual Agora App ID first!");
+                return;
+            }
+            const channelName = document.getElementById('channelInput').value.trim();
+            if (!channelName) { alert("Please enter a room name!"); return; }
+            if (isJoined) { alert("Already in a call! Leave first."); return; }
+            
+            try {
+                updateStatus("Connecting...", "disconnected");
+                rtc.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+                
+                // subscribe to remote users
+                rtc.client.on("user-published", async (user, mediaType) => {
+                    await rtc.client.subscribe(user, mediaType);
+                    console.log("Subscribed to remote user:", user.uid);
+
+                    if (mediaType === "video") {
+                        const remoteContainer = document.createElement("div");
+                        remoteContainer.id = `remote-${user.uid}`;
+                        remoteContainer.className = "video-container";
+                        remoteContainer.innerHTML = `<div class="video-label">Remote User (${user.uid})</div>`;
+                        document.getElementById("videoArea").appendChild(remoteContainer);
+                        user.videoTrack.play(remoteContainer);
+                    }
+                    if (mediaType === "audio") {
+                        user.audioTrack.play();
+                    }
+                });
+
+                rtc.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                rtc.localVideoTrack = await AgoraRTC.createCameraVideoTrack();
+                rtc.localVideoTrack.play("localVideoContainer");
+                
+                await rtc.client.join(APP_ID, channelName, TOKEN, null);
+                await rtc.client.publish([rtc.localAudioTrack, rtc.localVideoTrack]);
+
+                isJoined = true;
+                updateStatus(`✅ Connected to room: ${channelName}`, "connected");
+                document.querySelector('#localVideoContainer .video-label').textContent = "Your Video (Connected)";
+                console.log("Successfully joined the call!");
+            } catch (error) {
+                console.error("Failed to join:", error);
+                updateStatus(`❌ Connection failed: ${error.message}`, "disconnected");
+                if (rtc.localVideoTrack) rtc.localVideoTrack.close();
+                if (rtc.localAudioTrack) rtc.localAudioTrack.close();
+            }
+        }
+        
+        async function leaveCall() {
+            if (!isJoined) { alert("Not connected to any call!"); return; }
+            try {
+                await rtc.client.leave();
+                if (rtc.localVideoTrack) rtc.localVideoTrack.close();
+                if (rtc.localAudioTrack) rtc.localAudioTrack.close();
+                document.getElementById('videoArea').innerHTML = `
+                    <div class="video-container" id="localVideoContainer">
+                        <div class="video-label">Your Video (Not connected)</div>
+                    </div>`;
+                isJoined = false;
+                updateStatus("Disconnected - Ready to reconnect!", "disconnected");
+                console.log("Left the call successfully");
+            } catch (error) {
+                console.error("Failed to leave:", error);
+            }
+        }
+        
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('statusDisplay');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+    </script>
+</body>
+</html>
